@@ -14,8 +14,13 @@ import {
 import Link from "next/link";
 import React from "react";
 import { Badge } from "./ui/badge";
+import { useAuth } from "@/lib/AuthContext";
+import { useRouter } from "next/router";
+import { toast } from "react-toastify";
 
 const Sidebar = ({ isopen }: any) => {
+  const { user } = useAuth();
+  const router = useRouter();
   return (
     <div>
       <aside
@@ -75,13 +80,25 @@ const Sidebar = ({ isopen }: any) => {
               </Link>
             </li>
             <li>
-              <Link
-                href="#"
-                className="flex items-center px-2 py-2 text-gray-700 hover:bg-gray-100 rounded text-sm"
+              <button
+                onClick={() => {
+                  if (user) {
+                    if (user.plan === "Silver" || user.plan === "Gold") {
+                      router.push(`/users/${user._id}?tab=bookmarks`);
+                    } else {
+                      toast.info("Saves is a premium feature. Upgrade to Silver or Gold plan to use bookmarks.");
+                      router.push("/upgrade");
+                    }
+                  } else {
+                    toast.info("Please login to access bookmarks.");
+                    router.push("/auth");
+                  }
+                }}
+                className="w-full flex items-center px-2 py-2 text-gray-700 hover:bg-gray-100 rounded text-sm text-left cursor-pointer border-0 bg-transparent"
               >
                 <Bookmark className="w-4 h-4 mr-2 lg:mr-3" />
                 Saves
-              </Link>
+              </button>
             </li>
             <li>
               <Link

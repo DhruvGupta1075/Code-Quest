@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import Mainlayout from "@/layout/Mainlayout";
 import { useAuth } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
-import { Calendar, Edit, Plus, X } from "lucide-react";
+import { Calendar, Edit, Plus, X, Award, Star, Sparkles, Lock, CreditCard, Download, Send, Bookmark as BookmarkIcon, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import { toast } from "react-toastify";
@@ -47,26 +48,135 @@ const index = () => {
   const [loading, setloading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: users?.name || "",
-    about: users?.about || "",
-    tags: users?.tags || [],
+    name: "",
+    about: "",
+    tags: [] as string[],
   });
   const [newTag, setNewTag] = useState("");
 
+  const [activeTab, setActiveTab] = useState("profile");
+  const [bookmarks, setBookmarks] = useState<any[]>([]);
+  const [loadingBookmarks, setLoadingBookmarks] = useState(false);
+  const [billingForm, setBillingForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
+  const [goldPosts, setGoldPosts] = useState([
+    {
+      id: 1,
+      author: "Admin",
+      content: "Welcome to the Gold Lounge! Here you have direct access to exclusive community features, priority announcements, and beta APIs.",
+      date: "2026-07-01",
+    },
+    {
+      id: 2,
+      author: "Developer Advocate",
+      content: "Reminder: The monthly StackOverflow Core Ask-Me-Anything (AMA) will take place this Thursday at 18:00 UTC.",
+      date: "2026-07-05",
+    },
+  ]);
+  const [newGoldPost, setNewGoldPost] = useState("");
+
   useEffect(() => {
+    if (!id) return;
     const fetchuser = async () => {
       try {
-        const res = await axiosInstance.get("/user/getalluser");
-        const matcheduser = res.data.data.find((u: any) => u._id === id);
-        setusers(matcheduser);
+        const res = await axiosInstance.get(`/user/profile/${id}`);
+        setusers(res.data.data);
+        if (res.data.data) {
+          setEditForm({
+            name: res.data.data.name || "",
+            about: res.data.data.about || "",
+            tags: res.data.data.tags || [],
+          });
+          setBillingForm({
+            name: res.data.data.billingDetails?.name || res.data.data.name || "",
+            email: res.data.data.billingDetails?.email || res.data.data.email || "",
+            phone: res.data.data.billingDetails?.phone || "",
+            address: res.data.data.billingDetails?.address || "",
+          });
+        }
       } catch (error) {
-        console.log(error);
+        console.log("Failed to fetch custom profile, falling back", error);
+        try {
+          const resFallback = await axiosInstance.get("/user/getalluser");
+          const matcheduser = resFallback.data.data.find((u: any) => u._id === id);
+          if (matcheduser) {
+            setusers(matcheduser);
+            setEditForm({
+              name: matcheduser.name || "",
+              about: matcheduser.about || "",
+              tags: matcheduser.tags || [],
+            });
+            setBillingForm({
+              name: matcheduser.billingDetails?.name || matcheduser.name || "",
+              email: matcheduser.billingDetails?.email || matcheduser.email || "",
+              phone: matcheduser.billingDetails?.phone || "",
+              address: matcheduser.billingDetails?.address || "",
+            });
+          }
+        } catch (err) {
+          console.log(err);
+        }
       } finally {
         setloading(false);
       }
     };
     fetchuser();
   }, [id]);
+
+  useEffect(() => {
+    if (activeTab === "bookmarks") {
+      const fetchBookmarks = async () => {
+        setLoadingBookmarks(true);
+        try {
+          const res = await axiosInstance.get("/user/bookmarks");
+          setBookmarks(res.data.data);
+        } catch (error) {
+          console.error("Failed to fetch bookmarks:", error);
+          toast.error("Failed to load bookmarks");
+        } finally {
+          setLoadingBookmarks(false);
+        }
+      };
+      fetchBookmarks();
+    }
+  }, [activeTab]);
+
+  const handleSaveBilling = async () => {
+    try {
+      const res = await axiosInstance.patch(`/user/update/${user?._id}`, {
+        billingDetails: billingForm,
+      });
+      if (res.data.data) {
+        setusers(res.data.data);
+        toast.success("Billing details updated successfully!");
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to update billing details");
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId: string) => {
+    try {
+      const response = await axiosInstance.get(`/payment/invoice/${invoiceId}`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Invoice-${invoiceId}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to download invoice PDF");
+    }
+  };
   if (loading) {
     return (
       <Mainlayout>
@@ -135,8 +245,18 @@ const index = () => {
           <div className="flex-1 min-w-0">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
               <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 mb-1">
+                <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 mb-1 flex items-center gap-2 flex-wrap">
                   {users.name}
+                  {users.plan && users.plan !== "Free" && (
+                    <Badge className={`font-semibold uppercase tracking-wider text-xs border py-0.5 px-2.5 rounded-full flex items-center gap-1 ${
+                      users.plan === "Gold" ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow" :
+                      users.plan === "Silver" ? "bg-slate-500 hover:bg-slate-600 text-white border-slate-600" :
+                      "bg-yellow-600 hover:bg-yellow-700 text-white border-yellow-700"
+                    }`}>
+                      {users.plan === "Gold" ? <Star className="w-3.5 h-3.5" /> : users.plan === "Silver" ? <Sparkles className="w-3.5 h-3.5" /> : <Award className="w-3.5 h-3.5" />}
+                      {users.plan} Member
+                    </Badge>
+                  )}
                 </h1>
               </div>
 
@@ -293,48 +413,340 @@ const index = () => {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1  gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>About</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="prose max-w-none">
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                    {users.about}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Tags</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {users.tags.map((tag: string) => (
-                    <div
-                      key={tag}
-                      className="flex items-center justify-between"
-                    >
-                      <div>
+        {/* Tabs Menu */}
+        <div className="flex border-b border-gray-200 mb-6 gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveTab("profile")}
+            className={`pb-3 px-4 font-semibold text-sm border-b-2 transition ${
+              activeTab === "profile" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Profile
+          </button>
+          {isOwnProfile && (
+            <button
+              onClick={() => setActiveTab("billing")}
+              className={`pb-3 px-4 font-semibold text-sm border-b-2 transition ${
+                activeTab === "billing" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Billing & Subscription
+            </button>
+          )}
+          {(users.plan === "Silver" || users.plan === "Gold") && (
+            <button
+              onClick={() => setActiveTab("bookmarks")}
+              className={`pb-3 px-4 font-semibold text-sm border-b-2 transition ${
+                activeTab === "bookmarks" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Saved Questions ({users.bookmarks?.length || 0})
+            </button>
+          )}
+          {users.plan === "Gold" && (
+            <button
+              onClick={() => setActiveTab("goldlounge")}
+              className={`pb-3 px-4 font-semibold text-sm border-b-2 transition ${
+                activeTab === "goldlounge" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Gold Lounge 👑
+            </button>
+          )}
+        </div>
+
+        {/* Tab Content Panels */}
+        {activeTab === "profile" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>About</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose max-w-none">
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                      {users.about || "No profile bio available yet."}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Tags</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {users.tags && users.tags.length > 0 ? (
+                      users.tags.map((tag: string) => (
                         <Badge
+                          key={tag}
                           variant="secondary"
                           className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
                         >
                           {tag}
                         </Badge>
+                      ))
+                    ) : (
+                      <span className="text-gray-500 text-sm">No tags added yet.</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "billing" && isOwnProfile && (
+          <div className="space-y-6">
+            {/* Active Subscription Status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-orange-200 bg-orange-50/10">
+                <CardHeader>
+                  <CardTitle className="text-lg text-gray-800 flex items-center gap-2">
+                    <Award className="w-5 h-5 text-orange-600" /> Active Membership Plan
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{users.plan || "Free"} Plan</h3>
+                      <p className="text-sm text-gray-600">
+                        {users.plan === "Gold" ? "Unlimited Questions" :
+                         users.plan === "Silver" ? "15 Questions/day, Bookmarks unlocked" :
+                         users.plan === "Bronze" ? "5 Questions/day, Advanced Filters unlocked" :
+                         "1 Question/day limit"}
+                      </p>
+                    </div>
+                    <Badge className="font-semibold uppercase tracking-wider text-xs border bg-green-100 text-green-800 border-green-300">
+                      {users.subscriptionStatus === "active" ? "Active" : "Standard"}
+                    </Badge>
+                  </div>
+
+                  {users.renewalDate && (
+                    <div className="text-sm text-gray-600 border-t pt-3 flex justify-between">
+                      <span>Next Renewal Date:</span>
+                      <span className="font-semibold text-gray-900">{new Date(users.renewalDate).toLocaleDateString()}</span>
+                    </div>
+                  )}
+
+                  {users.plan !== "Gold" && (
+                    <div className="pt-2">
+                      <Button onClick={() => router.push("/upgrade")} className="bg-orange-600 hover:bg-orange-700 text-white w-full">
+                        Upgrade / Change Plan
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Billing Address Details */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg text-gray-800 flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-blue-600" /> Billing Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="billingFormName">Billing Name</Label>
+                      <Input
+                        id="billingFormName"
+                        value={billingForm.name}
+                        onChange={(e) => setBillingForm({ ...billingForm, name: e.target.value })}
+                        placeholder="Full Name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="billingFormEmail">Billing Email</Label>
+                      <Input
+                        id="billingFormEmail"
+                        type="email"
+                        value={billingForm.email}
+                        onChange={(e) => setBillingForm({ ...billingForm, email: e.target.value })}
+                        placeholder="Email Address"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="billingFormPhone">Phone Number</Label>
+                      <Input
+                        id="billingFormPhone"
+                        value={billingForm.phone}
+                        onChange={(e) => setBillingForm({ ...billingForm, phone: e.target.value })}
+                        placeholder="+91 99999 99999"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="billingFormAddress">Billing Address</Label>
+                      <Input
+                        id="billingFormAddress"
+                        value={billingForm.address}
+                        onChange={(e) => setBillingForm({ ...billingForm, address: e.target.value })}
+                        placeholder="Billing Address, City, State"
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={handleSaveBilling} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    Save Billing Details
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Payment History and Invoices */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg text-gray-800">Payment & Billing History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {users.paymentHistory && users.paymentHistory.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b text-gray-600 font-semibold text-sm">
+                          <th className="py-3 px-4">Invoice ID</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4">Plan Purchased</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.paymentHistory.map((pm: any) => (
+                          <tr key={pm.invoiceId} className="border-b hover:bg-gray-50/50 text-sm">
+                            <td className="py-3 px-4 font-mono text-gray-900">{pm.invoiceId}</td>
+                            <td className="py-3 px-4 text-gray-600">{new Date(pm.date).toLocaleDateString()}</td>
+                            <td className="py-3 px-4 font-medium">{pm.plan} Plan</td>
+                            <td className="py-3 px-4 text-gray-900">INR {pm.amount}.00</td>
+                            <td className="py-3 px-4">
+                              <span className="inline-block bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                {pm.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadInvoice(pm.invoiceId)}
+                                className="flex items-center gap-1 mx-auto text-xs bg-transparent border-gray-300 hover:bg-gray-100"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Invoice PDF
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500 py-6 text-sm">No payment history found.</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "bookmarks" && (users.plan === "Silver" || users.plan === "Gold") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BookmarkIcon className="w-5 h-5 text-yellow-600" /> Bookmarked Questions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingBookmarks ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                </div>
+              ) : bookmarks.length > 0 ? (
+                <div className="space-y-4">
+                  {bookmarks.map((q: any) => (
+                    <div key={q._id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                      <Link
+                        href={`/questions/${q._id}`}
+                        className="text-blue-600 hover:text-blue-800 font-semibold block text-base mb-1"
+                      >
+                        {q.questiontitle}
+                      </Link>
+                      <p className="text-gray-600 text-sm line-clamp-2 mb-2">{q.questionbody}</p>
+                      <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span>asked {new Date(q.askedon).toLocaleDateString()}</span>
+                        <span className="font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                          {q.noofanswer} answers
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              ) : (
+                <div className="text-center text-gray-500 py-10 text-sm">
+                  You haven't saved any questions yet. Bookmark questions to see them here!
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "goldlounge" && users.plan === "Gold" && (
+          <Card className="border-yellow-200">
+            <CardHeader className="bg-yellow-50/50 border-b border-yellow-100">
+              <CardTitle className="text-lg text-yellow-800 flex items-center gap-2 font-bold">
+                👑 Exclusive Gold Members Lounge
+              </CardTitle>
+              <p className="text-xs text-yellow-700">
+                You are viewing the exclusive gold-tier developer community workspace. Share ideas, browse beta announcements, and connect directly.
+              </p>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+              {/* Exclusive Post form */}
+              <div className="space-y-3 border-b pb-6">
+                <Label htmlFor="goldpost" className="font-semibold text-sm">Post to the Gold Lounge</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="goldpost"
+                    value={newGoldPost}
+                    onChange={(e) => setNewGoldPost(e.target.value)}
+                    placeholder="Share an exclusive announcement or query..."
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!newGoldPost.trim()) return;
+                      const post = {
+                        id: Date.now(),
+                        author: user?.name || "Gold Member",
+                        content: newGoldPost,
+                        date: new Date().toISOString().split("T")[0],
+                      };
+                      setGoldPosts([post, ...goldPosts]);
+                      setNewGoldPost("");
+                      toast.success("Post shared in Gold Lounge!");
+                    }}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white flex items-center gap-1.5"
+                  >
+                    <Send className="w-4 h-4" /> Share
+                  </Button>
+                </div>
+              </div>
+
+              {/* Gold Social Posts Wall */}
+              <div className="space-y-4">
+                {goldPosts.map((gp) => (
+                  <div key={gp.id} className="p-4 bg-yellow-50/10 border border-yellow-100 rounded-lg space-y-2">
+                    <div className="flex justify-between text-xs font-semibold text-yellow-800">
+                      <span>@{gp.author}</span>
+                      <span className="text-gray-400 font-normal">{gp.date}</span>
+                    </div>
+                    <p className="text-sm text-gray-800 leading-relaxed font-medium">{gp.content}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </Mainlayout>
   );

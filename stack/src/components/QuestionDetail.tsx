@@ -264,8 +264,13 @@ const QuestionDetail = ({ questionId }: any) => {
         const matchedquestion = res.data.data.find(
           (u: any) => u._id === questionId
         );
-        setanswer(matchedquestion.answer);
-        setquestion(matchedquestion);
+        if (matchedquestion) {
+          const stored = localStorage.getItem("user");
+          const parsedUser = stored ? JSON.parse(stored) : null;
+          matchedquestion.isBookmarked = parsedUser?.bookmarks?.includes(matchedquestion._id) || false;
+          setanswer(matchedquestion.answer);
+          setquestion(matchedquestion);
+        }
       } catch (error) {
         console.log(error);
       } finally {
@@ -305,8 +310,36 @@ const QuestionDetail = ({ questionId }: any) => {
       toast.error("Failed to Vote question");
     }
   };
-  const handlebookmark = () => {
-    setquestion((prev: any) => ({ ...prev, isBookmarked: !prev.isBookmarked }));
+  const handlebookmark = async () => {
+    if (!user) {
+      toast.error("Please login to bookmark questions");
+      router.push("/auth");
+      return;
+    }
+    try {
+      const res = await axiosInstance.post(`/user/bookmark/${question._id}`);
+      if (res.status === 200) {
+        setquestion((prev: any) => ({
+          ...prev,
+          isBookmarked: res.data.isBookmarked,
+        }));
+        
+        // Synchronize local storage user bookmarks
+        const stored = localStorage.getItem("user");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.bookmarks = res.data.bookmarks;
+          localStorage.setItem("user", JSON.stringify(parsed));
+        }
+        toast.success(res.data.message);
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.message || "Failed to toggle bookmark";
+      toast.error(msg);
+      if (error.response?.status === 403) {
+        router.push("/upgrade");
+      }
+    }
   };
   const handleSubmitanswer = async () => {
     if(!user){
