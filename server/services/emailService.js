@@ -92,9 +92,10 @@ export const sendEmail = async ({ to, subject, html, fromName, fromEmail }) => {
   if (process.env.RESEND_API_KEY) {
     console.log("[Email Service] Resend API key detected. Attempting delivery via Resend HTTPS API (Port 443)...");
     try {
+      const finalFromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromField = fromName 
-        ? `${fromName} <${fromEmail || "security@stackoverflowclone.com"}>` 
-        : (fromEmail || "security@stackoverflowclone.com");
+        ? `${fromName} <${finalFromEmail}>` 
+        : finalFromEmail;
       
       const start = Date.now();
       const response = await fetch("https://api.resend.com/emails", {
