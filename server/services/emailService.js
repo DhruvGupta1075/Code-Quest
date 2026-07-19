@@ -138,7 +138,7 @@ export const sendEmail = async ({ to, subject, html, fromName, fromEmail }) => {
         },
         body: JSON.stringify({
           personalizations: [{ to: [{ email: to }] }],
-          from: { email: fromEmail || "security@stackoverflowclone.com", name: fromName },
+          from: { email: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER || fromEmail || "security@stackoverflowclone.com", name: fromName },
           subject: subject,
           content: [{ type: "text/html", value: html }],
         }),
